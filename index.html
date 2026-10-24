@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2a2d32">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>fx-991MS Scientific Calculator</title>
+<style>
+:root{--page:#e4e7ea;--ink:#2a2d32;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--page:#14161a;--ink:#d6d9de;color-scheme:dark}}
+:root[data-theme="dark"]{--page:#14161a;--ink:#d6d9de;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:inherit}
+body{margin:0;min-height:100vh;background:var(--page);color:var(--ink);display:flex;flex-direction:column;align-items:center;padding:20px 10px;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.calc{width:100%;max-width:380px;background:linear-gradient(160deg,#3d4148,#2a2d32);border-radius:18px 18px 42px 42px;padding:14px 16px 24px;box-shadow:0 18px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08)}
+.brand{display:flex;justify-content:space-between;align-items:baseline;color:#d9dce1;margin:0 4px 8px}
+.brand b{font-style:italic;font-size:18px}
+.brand span{font-size:11px;opacity:.7}
+.lcd{background:#c5cfb2;border-radius:8px;border:3px solid #1f2227;box-shadow:inset 0 2px 7px rgba(0,0,0,.4);padding:4px 10px 6px;color:#1c2418;font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
+.ind{display:flex;gap:10px;font-size:10px;height:14px;font-weight:700}
+.ind i{font-style:normal;opacity:.14}.ind i.on{opacity:1}
+.expr{position:relative;height:26px;font-size:18px;line-height:26px;white-space:nowrap;overflow:hidden}
+.cur{display:inline-block;width:2px;height:1em;margin-bottom:-2px;background:currentColor;animation:b 1s steps(1) infinite}
+@keyframes b{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.cur{animation:none}}
+.res{height:36px;font-size:26px;line-height:36px;text-align:right;white-space:nowrap;overflow:hidden}
+.pad{display:grid;margin-top:8px}
+.g6{grid-template-columns:repeat(6,1fr);gap:4px 7px}
+.g5{grid-template-columns:repeat(5,1fr);gap:2px 9px}
+.k{position:relative;padding-top:13px}
+.k .s,.k .a{position:absolute;top:0;font-size:9.5px;font-weight:600;line-height:1;white-space:nowrap}
+.k .s{left:1px;color:#e8b930}.k .a{right:1px;color:#ff7a6b}
+.k button{width:100%;height:32px;border:0;border-radius:9px;background:#4a4e56;color:#eef0f2;font:600 12px system-ui,sans-serif;cursor:pointer;box-shadow:0 3px 0 #17191c,inset 0 1px 0 rgba(255,255,255,.14)}
+.k button:active{transform:translateY(2px);box-shadow:0 1px 0 #17191c}
+.k button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.k.n button{height:40px;background:#e9e9e3;color:#1c1c1c;font-size:18px}
+.k.o button{height:40px;background:#5a5f68;font-size:18px}
+.k.x button{height:40px;background:#5d7da3;color:#fff;font-size:15px}
+.k.sh button{background:#e8b930;color:#222}
+.k.al button{background:#d4493c;color:#fff}
+.k button.on{box-shadow:0 0 0 2px #fff,0 3px 0 #17191c}
+.hint{max-width:380px;font-size:12px;opacity:.7;text-align:center;margin:14px 6px 0}
+</style>
+</head>
+<body>
+<main class="calc" aria-label="fx-991MS scientific calculator">
+  <div class="brand"><b>fx-991MS</b><span>scientific calculator</span></div>
+  <div class="lcd">
+    <div class="ind"><i id="iS">S</i><i id="iA">A</i><i id="iH">hyp</i><i id="iP">STO</i><i id="iM">M</i><i id="iD" class="on">D</i></div>
+    <div class="expr" id="expr"></div>
+    <div class="res" id="res" role="status" aria-live="polite"></div>
+  </div>
+  <div id="keys"></div>
+</main>
+<p class="hint">Keyboard works too: numbers, operators, Enter, Backspace and Esc. SHIFT + = gives %, SHIFT + . gives Ran#, SHIFT + S⇔D toggles ENG notation. To store a value, press SHIFT then STO, then the key marked with the red letter.</p>
+<script>
+const $=id=>document.getElementById(id);
+const st={t:[],c:0,res:'',err:false,done:false,ans:0,lastv:undefined,mode:0,sh:false,al:false,hyp:false,pend:null,frac:false,eng:false,mem:{A:0,B:0,C:0,D:0,E:0,F:0,X:0,Y:0,M:0}};
+
+/* ---------- maths ---------- */
+function calc(src){
+  const s=src.replace(/−/g,'-');
+  const re=/(?:\d+\.?\d*|\.\d+)(?:ᴇ[+-]?\d+)?|asin\(|acos\(|atan\(|sinh\(|cosh\(|tanh\(|sin\(|cos\(|tan\(|log\(|ln\(|√\(|∛\(|Ans|Ran#|π|⁻¹|[²³!%+\-×÷^()ᴘᴄe⌟A-FMXY]/g;
+  const t=[];let m,l=0;
+  while((m=re.exec(s))){if(m.index!==l)throw 0;l=re.lastIndex;if(/^[\d.]/.test(m[0])&&/^[\d.]/.test(t[t.length-1]||''))throw 0;t.push(m[0])}
+  if(l!==s.length)throw 0;
+  let p=0;const pk=()=>t[p],nx=()=>t[p++];
+  const num=x=>x!==undefined&&/^[\d.]/.test(x);
+  const prim=x=>x!==undefined&&(num(x)||/\($/.test(x)||/^(Ans|Ran#|π|e|[A-FMXY])$/.test(x));
+  const rad=x=>st.mode===0?x*Math.PI/180:st.mode===1?x:x*Math.PI/200;
+  const deg=x=>st.mode===0?x*180/Math.PI:st.mode===1?x:x*200/Math.PI;
+  const z=x=>Math.abs(x)<1e-14?0:x;
+  const fact=n=>{if(n<0||n>69||n!==Math.floor(n))throw 0;let r=1;for(let i=2;i<=n;i++)r*=i;return r};
+  const F={'sin(':x=>z(Math.sin(rad(x))),'cos(':x=>z(Math.cos(rad(x))),
+    'tan(':x=>{const c=z(Math.cos(rad(x)));if(!c)throw 0;return z(Math.sin(rad(x)))/c},
+    'asin(':x=>deg(Math.asin(x)),'acos(':x=>deg(Math.acos(x)),'atan(':x=>deg(Math.atan(x)),
+    'sinh(':Math.sinh,'cosh(':Math.cosh,'tanh(':Math.tanh,'log(':Math.log10,'ln(':Math.log,'√(':Math.sqrt,'∛(':Math.cbrt};
+  const prim1=()=>{
+    const x=nx();
+    if(x===undefined)throw 0;
+    if(num(x)){
+      let v=parseFloat(x.replace('ᴇ','e'));
+      if(pk()==='⌟'){nx();const a=nx();if(!num(a))throw 0;const n=parseFloat(a);
+        if(pk()==='⌟'){nx();const b=nx();if(!num(b))throw 0;v=v+n/parseFloat(b)}else v=v/n}
+      return v;
+    }
+    if(x==='('){const v=expr();if(pk()===')')nx();return v}
+    if(F[x]){const v=expr();if(pk()===')')nx();return F[x](v)}
+    if(x==='π')return Math.PI;
+    if(x==='e')return Math.E;
+    if(x==='Ans')return st.ans;
+    if(x==='Ran#')return Math.floor(Math.random()*1000)/1000;
+    if(/^[A-FMXY]$/.test(x))return st.mem[x];
+    throw 0;
+  };
+  const post=()=>{let v=prim1();for(;;){const x=pk();if(x==='²')v*=v;else if(x==='³')v=v*v*v;else if(x==='⁻¹')v=1/v;else if(x==='!')v=fact(v);else if(x==='%')v/=100;else return v;nx()}};
+  const pow=()=>{const b=post();if(pk()==='^'){nx();return Math.pow(b,un())}return b};
+  const perm=()=>{let v=pow();while(pk()==='ᴘ'||pk()==='ᴄ'){const o=nx(),r=pow();if(r<0||v<r||r!==Math.floor(r))throw 0;v=o==='ᴘ'?fact(v)/fact(v-r):fact(v)/(fact(r)*fact(v-r))}return v};
+  const un=()=>{if(pk()==='-'){nx();return -un()}if(pk()==='+'){nx();return un()}return perm()};
+  const term=()=>{let v=un();for(;;){const x=pk();if(x==='×'){nx();v*=un()}else if(x==='÷'){nx();v/=un()}else if(prim(x))v*=un();else return v}};
+  const expr=()=>{let v=term();while(pk()==='+'||pk()==='-'){const o=nx(),r=term();v=o==='+'?v+r:v-r}return v};
+  const v=expr();
+  if(p<t.length||!isFinite(v))throw 0;
+  return v;
+}
+function fmt(v){
+  if(v===0)return'0';
+  const s=parseFloat(v.toPrecision(10)),a=Math.abs(s);
+  if(st.eng){const x=Math.floor(Math.log10(a)/3)*3,mm=parseFloat((s/Math.pow(10,x)).toPrecision(10));return(mm+(x?'ᴇ'+x:'')).replace(/-/g,'−')}
+  if(a>=1e10||a<1e-4){const[m,e]=s.toExponential(9).split('e');return(parseFloat(m)+'ᴇ'+parseInt(e,10)).replace(/-/g,'−')}
+  return String(s).replace(/-/g,'−');
+}
+function toFrac(v){
+  const neg=v<0,x=Math.abs(v);if(x>1e9)return null;
+  let n0=0,d0=1,n1=1,d1=0,b=x;
+  for(let i=0;i<32;i++){
+    const a=Math.floor(b),n2=a*n1+n0,d2=a*d1+d0;
+    if(d2>9999)return null;
+    n0=n1;d0=d1;n1=n2;d1=d2;
+    if(Math.abs(x-n1/d1)<1e-11*Math.max(1,x))break;
+    b=1/(b-a);if(!isFinite(b))break;
+  }
+  if(Math.abs(x-n1/d1)>1e-9*Math.max(1,x))return null;
+  const w=Math.floor(n1/d1),r=n1-w*d1,s=neg?'−':'';
+  if(d1===1)return s+n1;
+  return s+(w?w+'⌟':'')+r+'⌟'+d1;
+}
+const show=(v,fr)=>{st.frac=fr;return fr?(toFrac(v)||fmt(v)):fmt(v)};
+const curVal=()=>{if(!st.t.length)return st.ans;try{return calc(st.t.join(''))}catch(e){return st.ans}};
+
+/* ---------- editing ---------- */
+function ins(tok){
+  if(st.hyp&&/^(sin|cos|tan)\($/.test(tok))tok=tok.slice(0,-1)+'h(';
+  if(st.done){
+    st.t=/^([+\-−×÷^²³!%ᴘᴄ]|⁻¹)/.test(tok)?['Ans']:[];
+    st.c=st.t.length;st.res='';
+  }
+  st.t.splice(st.c,0,tok);st.c++;st.done=false;st.hyp=false;
+}
+function equals(){
+  const src=st.t.join('');
+  if(!src)return;
+  try{const v=calc(src);st.ans=st.lastv=v;st.res=show(v,src.includes('⌟'));st.done=true}
+  catch(e){st.res='Math ERROR';st.err=true;st.done=false}
+}
+function press(k){
+  if(st.err){st.err=false;st.res=''}
+  let act=k[1];
+  const isMod=act==='f:shift'||act==='f:alpha';
+  if(st.sh&&k[3])act=k[3];else if(st.al&&k[5])act=k[5];
+  if(!isMod){st.sh=false;st.al=false}
+  if(st.pend){
+    if(k[5]&&k[5].startsWith('i:')){
+      const name=k[5].slice(2);
+      if(st.pend==='sto'){st.mem[name]=curVal()}else ins(name);
+      st.pend=null;draw();return;
+    }
+    st.pend=null;
+  }
+  const arg=act.slice(2);
+  if(act[0]==='i'){ins(arg)}
+  else switch(arg){
+    case 'shift':st.sh=!st.sh;st.al=false;break;
+    case 'alpha':st.al=!st.al;st.sh=false;break;
+    case 'left':st.c=Math.max(0,st.c-1);st.done=false;break;
+    case 'right':st.c=Math.min(st.t.length,st.c+1);st.done=false;break;
+    case 'del':if(st.c>0){st.t.splice(st.c-1,1);st.c--}st.done=false;st.res='';break;
+    case 'ac':st.t=[];st.c=0;st.res='';st.done=false;st.hyp=false;st.pend=null;break;
+    case 'clr':for(const n in st.mem)st.mem[n]=0;st.ans=0;st.lastv=undefined;st.t=[];st.c=0;st.res='';st.done=false;break;
+    case 'mode':st.mode=(st.mode+1)%3;break;
+    case 'hyp':st.hyp=!st.hyp;break;
+    case 'sd':if(st.lastv!==undefined&&st.done){st.frac=!st.frac;st.res=st.frac?(toFrac(st.lastv)||fmt(st.lastv)):fmt(st.lastv)}break;
+    case 'eng':st.eng=!st.eng;if(st.lastv!==undefined&&st.done)st.res=fmt(st.lastv);break;
+    case 'eq':equals();break;
+    case 'mp':case 'mm':{const v=curVal();st.mem.M+=arg==='mm'?-v:v;st.ans=st.lastv=v;st.res=fmt(v);st.done=true;break}
+    case 'sto':st.pend='sto';break;
+    case 'rcl':st.pend='rcl';break;
+  }
+  draw();
+}
+
+/* ---------- keys ---------- */
+const K=(l,a,sl,sa,al,aa,c)=>[l,a,sl||'',sa||'',al||'',aa||'',c||''];
+const N=d=>K(d,'i:'+d,0,0,0,0,'n');
+const O=(l,a)=>K(l,a,0,0,0,0,'o');
+const rows=[
+ ['g6',[K('SHIFT','f:shift',0,0,0,0,'sh'),K('ALPHA','f:alpha',0,0,0,0,'al'),K('◀','f:left'),K('▶','f:right'),K('MODE','f:mode'),K('S⇔D','f:sd','ENG','f:eng')]],
+ ['g6',[K('a b/c','i:⌟'),K('√','i:√(','∛','i:∛('),K('x²','i:²','x³','i:³'),K('xʸ','i:^'),K('log','i:log(','10ˣ','i:10^('),K('ln','i:ln(','eˣ','i:e^(')]],
+ ['g6',[K('(−)','i:−',0,0,'A','i:A'),K('hyp','f:hyp',0,0,'B','i:B'),K('sin','i:sin(','sin⁻¹','i:asin(','C','i:C'),K('cos','i:cos(','cos⁻¹','i:acos(','D','i:D'),K('tan','i:tan(','tan⁻¹','i:atan(','E','i:E'),K('RCL','f:rcl','STO','f:sto','F','i:F')]],
+ ['g6',[K('(','i:(',0,0,'Y','i:Y'),K(')','i:)',0,0,'X','i:X'),K('x⁻¹','i:⁻¹','x!','i:!'),K('nCr','i:ᴄ','nPr','i:ᴘ'),K('M+','f:mp','M−','f:mm','M','i:M'),K('π','i:π','e','i:e')]],
+ ['g5',[N('7'),N('8'),N('9'),K('DEL','f:del',0,0,0,0,'x'),K('AC','f:ac','CLR','f:clr',0,0,'x')]],
+ ['g5',[N('4'),N('5'),N('6'),O('×','i:×'),O('÷','i:÷')]],
+ ['g5',[N('1'),N('2'),N('3'),O('+','i:+'),O('−','i:−')]],
+ ['g5',[N('0'),K('.','i:.','Ran#','i:Ran#',0,0,'n'),K('×10ˣ','i:ᴇ',0,0,0,0,'n'),O('Ans','i:Ans'),K('=','f:eq','%','i:%',0,0,'o')]]
+];
+const ALL=[],host=$('keys');
+rows.forEach(([g,ks])=>{
+  const r=document.createElement('div');r.className='pad '+g;
+  ks.forEach(k=>{
+    const d=document.createElement('div');d.className='k '+k[6];
+    d.innerHTML=(k[2]?`<span class="s">${k[2]}</span>`:'')+(k[4]?`<span class="a">${k[4]}</span>`:'');
+    const b=document.createElement('button');b.type='button';b.textContent=k[0];
+    b.onclick=ev=>{press(k);if(ev.detail)b.blur()};
+    d.append(b);r.append(d);ALL.push([k,b]);
+  });
+  host.append(r);
+});
+const flag={'f:shift':'sh','f:alpha':'al','f:hyp':'hyp'};
+function draw(){
+  const e=$('expr');
+  e.textContent='';
+  const cur=document.createElement('i');cur.className='cur';
+  e.append(st.t.slice(0,st.c).join(''),cur,st.t.slice(st.c).join(''));
+  if(cur.offsetLeft>e.scrollLeft+e.clientWidth-14)e.scrollLeft=cur.offsetLeft-e.clientWidth+14;
+  else if(cur.offsetLeft<e.scrollLeft)e.scrollLeft=cur.offsetLeft;
+  $('res').textContent=st.res||(st.t.length?'':'0');
+  $('iS').classList.toggle('on',st.sh);
+  $('iA').classList.toggle('on',st.al);
+  $('iH').classList.toggle('on',st.hyp);
+  $('iP').classList.toggle('on',!!st.pend);
+  $('iP').textContent=st.pend==='rcl'?'RCL':'STO';
+  $('iM').classList.toggle('on',st.mem.M!==0);
+  $('iD').textContent=['D','R','G'][st.mode];
+  ALL.forEach(([k,b])=>{const f=flag[k[1]];if(f)b.classList.toggle('on',!!st[f])});
+}
+addEventListener('keydown',ev=>{
+  if((ev.key==='Enter'||ev.key===' ')&&ev.target.closest&&ev.target.closest('button'))return;
+  if(ev.ctrlKey||ev.metaKey||ev.altKey)return;
+  const m={Enter:'f:eq','=':'f:eq',Backspace:'f:del',Escape:'f:ac',ArrowLeft:'f:left',ArrowRight:'f:right','*':'i:×','/':'i:÷','-':'i:−','+':'i:+','^':'i:^','(':'i:(',')':'i:)','!':'i:!','%':'i:%','.':'i:.',p:'i:π',e:'i:e'};
+  let a=m[ev.key];
+  if(!a&&/^\d$/.test(ev.key))a='i:'+ev.key;
+  if(a){ev.preventDefault();press([0,a,'','','',''])}
+});
+draw();
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
